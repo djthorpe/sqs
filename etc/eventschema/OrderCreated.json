@@ -1,0 +1,79 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "title": "Order Created Event",
+    "description": "Event emitted when a new order is created",
+    "properties": {
+        "orderId": {
+            "type": "string",
+            "description": "Unique order identifier"
+        },
+        "customerId": {
+            "type": "string",
+            "description": "Customer identifier"
+        },
+        "amount": {
+            "type": "number",
+            "description": "Order total amount",
+            "minimum": 0
+        },
+        "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code",
+            "pattern": "^[A-Z]{3}$"
+        },
+        "items": {
+            "type": "array",
+            "description": "Order line items",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "sku": {
+                        "type": "string",
+                        "description": "Product SKU"
+                    },
+                    "quantity": {
+                        "type": "integer",
+                        "description": "Item quantity",
+                        "minimum": 1
+                    },
+                    "price": {
+                        "type": "number",
+                        "description": "Unit price",
+                        "minimum": 0
+                    }
+                },
+                "required": [
+                    "sku",
+                    "quantity",
+                    "price"
+                ]
+            }
+        },
+        "status": {
+            "type": "string",
+            "description": "Order status",
+            "enum": [
+                "pending",
+                "confirmed",
+                "processing",
+                "shipped",
+                "delivered",
+                "cancelled"
+            ]
+        },
+        "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Order creation timestamp"
+        }
+    },
+    "required": [
+        "orderId",
+        "customerId",
+        "amount",
+        "currency",
+        "status",
+        "timestamp"
+    ]
+}

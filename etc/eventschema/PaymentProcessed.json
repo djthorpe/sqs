@@ -1,0 +1,70 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "title": "Payment Processed Event",
+    "description": "Event emitted when a payment is successfully processed",
+    "properties": {
+        "paymentId": {
+            "type": "string",
+            "description": "Unique payment identifier"
+        },
+        "orderId": {
+            "type": "string",
+            "description": "Associated order identifier"
+        },
+        "customerId": {
+            "type": "string",
+            "description": "Customer identifier"
+        },
+        "amount": {
+            "type": "number",
+            "description": "Payment amount",
+            "minimum": 0
+        },
+        "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code",
+            "pattern": "^[A-Z]{3}$"
+        },
+        "paymentMethod": {
+            "type": "string",
+            "description": "Payment method used",
+            "enum": [
+                "credit_card",
+                "debit_card",
+                "bank_transfer",
+                "digital_wallet",
+                "crypto"
+            ]
+        },
+        "status": {
+            "type": "string",
+            "description": "Payment status",
+            "enum": [
+                "pending",
+                "authorized",
+                "captured",
+                "failed",
+                "refunded"
+            ]
+        },
+        "transactionId": {
+            "type": "string",
+            "description": "External transaction ID from payment processor"
+        },
+        "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Payment processing timestamp"
+        }
+    },
+    "required": [
+        "paymentId",
+        "orderId",
+        "amount",
+        "currency",
+        "paymentMethod",
+        "status",
+        "timestamp"
+    ]
+}

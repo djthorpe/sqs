@@ -1,0 +1,53 @@
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "type": "object",
+    "title": "Order Updated Event",
+    "description": "Event emitted when an order is updated",
+    "properties": {
+        "orderId": {
+            "type": "string",
+            "description": "Unique order identifier"
+        },
+        "status": {
+            "type": "string",
+            "description": "Updated order status",
+            "enum": [
+                "pending",
+                "confirmed",
+                "processing",
+                "shipped",
+                "delivered",
+                "cancelled"
+            ]
+        },
+        "previousStatus": {
+            "type": "string",
+            "description": "Previous order status",
+            "enum": [
+                "pending",
+                "confirmed",
+                "processing",
+                "shipped",
+                "delivered",
+                "cancelled"
+            ]
+        },
+        "updatedFields": {
+            "type": "array",
+            "description": "List of fields that were updated",
+            "items": {
+                "type": "string"
+            }
+        },
+        "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Update timestamp"
+        }
+    },
+    "required": [
+        "orderId",
+        "status",
+        "timestamp"
+    ]
+}
