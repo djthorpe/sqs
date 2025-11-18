@@ -1,7 +1,11 @@
+data "aws_sqs_queue" "target" {
+  name = var.queue
+}
+
 resource "aws_cloudwatch_event_rule" "rule" {
   name                = var.prefix != "" ? "${var.prefix}-${var.rule_name}" : var.rule_name
   description         = var.rule_description
-  event_bus_name      = var.event_bus_name
+  event_bus_name      = var.eventbus
   event_pattern       = var.event_pattern
   schedule_expression = var.schedule_expression
   state               = var.enabled ? "ENABLED" : "DISABLED"
@@ -15,7 +19,7 @@ resource "aws_cloudwatch_event_target" "sqs" {
   rule           = aws_cloudwatch_event_rule.rule.name
   event_bus_name = aws_cloudwatch_event_rule.rule.event_bus_name
   target_id      = var.target_id != "" ? var.target_id : "sqs-${var.rule_name}"
-  arn            = var.sqs_queue_arn
+  arn            = data.aws_sqs_queue.target.arn
   role_arn       = var.role_arn
 
   dynamic "sqs_target" {
@@ -51,7 +55,7 @@ resource "aws_cloudwatch_event_target" "sqs" {
 
 # IAM policy to allow EventBridge to send messages to SQS
 resource "aws_sqs_queue_policy" "eventbridge" {
-  queue_url = "https://sqs.${data.aws_region.current.id}.amazonaws.com/${data.aws_caller_identity.current.account_id}/${var.sqs_queue_name}"
+  queue_url = data.aws_sqs_queue.target.url
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -63,7 +67,7 @@ resource "aws_sqs_queue_policy" "eventbridge" {
           Service = "events.amazonaws.com"
         }
         Action   = "sqs:SendMessage"
-        Resource = var.sqs_queue_arn
+        Resource = data.aws_sqs_queue.target.arn
         Condition = {
           ArnEquals = {
             "aws:SourceArn" = aws_cloudwatch_event_rule.rule.arn
@@ -73,6 +77,3 @@ resource "aws_sqs_queue_policy" "eventbridge" {
     ]
   })
 }
-
-data "aws_region" "current" {}
-data "aws_caller_identity" "current" {}

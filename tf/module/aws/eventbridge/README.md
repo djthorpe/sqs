@@ -76,9 +76,8 @@ module "sqs" {
 module "order_events_to_sqs" {
   source = "./tf/module/aws/eventbridge_sqs_target"
   
-  event_bus_name = module.orders_eventbridge.name
-  sqs_queue_arn  = module.sqs.queue_arns["order-processor"]
-  sqs_queue_name = module.sqs.queue_names["order-processor"]
+  eventbus = module.orders_eventbridge.name
+  queue    = module.sqs.names["order-processor"]
   
   rule_name = "order-created"
   prefix    = "myapp"

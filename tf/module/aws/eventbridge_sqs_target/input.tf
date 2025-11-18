@@ -15,7 +15,7 @@ variable "prefix" {
   default     = ""
 }
 
-variable "event_bus_name" {
+variable "eventbus" {
   type        = string
   description = "Name of the EventBridge event bus (use 'default' for the default bus)"
   default     = "default"
@@ -39,14 +39,9 @@ variable "enabled" {
   default     = true
 }
 
-variable "sqs_queue_arn" {
+variable "queue" {
   type        = string
-  description = "ARN of the target SQS queue"
-}
-
-variable "sqs_queue_name" {
-  type        = string
-  description = "Name of the target SQS queue (needed for queue policy)"
+  description = "Name of the target SQS queue"
 }
 
 variable "target_id" {

@@ -29,8 +29,7 @@ module "order_events_to_sqs" {
     detail-type = ["Order Created"]
   })
   
-  sqs_queue_arn  = "arn:aws:sqs:us-east-1:123456789012:order-queue"
-  sqs_queue_name = "order-queue"
+  queue = "order-queue"
 }
 ```
 
@@ -54,17 +53,16 @@ module "sqs" {
 module "order_events" {
   source = "./tf/module/aws/eventbridge_sqs_target"
   
-  rule_name      = "order-created"
-  event_bus_name = module.eventbridge.event_bus_names["orders"]
-  prefix         = "myapp"
+  rule_name = "order-created"
+  eventbus  = module.eventbridge.name
+  prefix    = "myapp"
   
   event_pattern = jsonencode({
     source      = ["myapp.orders"]
     detail-type = ["Order Created"]
   })
   
-  sqs_queue_arn  = module.sqs.queue_arns["order-processor"]
-  sqs_queue_name = module.sqs.queue_names["order-processor"]
+  queue = module.sqs.names["order-processor"]
 }
 ```
 
@@ -82,10 +80,8 @@ module "transaction_events" {
     detail-type = ["Transaction Completed"]
   })
   
-  sqs_queue_arn        = "arn:aws:sqs:us-east-1:123456789012:transactions.fifo"
-  sqs_queue_name       = "transactions.fifo"
+  queue                = "transactions.fifo"
   sqs_message_group_id = "transactions"
-}
 ```
 
 ### Example with Schedule Expression
@@ -98,12 +94,11 @@ module "daily_report" {
   rule_description    = "Trigger daily report generation at midnight"
   schedule_expression = "cron(0 0 * * ? *)"
   
-  sqs_queue_arn  = "arn:aws:sqs:us-east-1:123456789012:report-queue"
-  sqs_queue_name = "report-queue"
+  queue = "report-queue"
 }
 ```
 
-### Example with Input Transformation
+### Example with Input Transformer
 
 ```hcl
 module "user_signup_events" {
@@ -116,8 +111,7 @@ module "user_signup_events" {
     detail-type = ["User Signup"]
   })
   
-  sqs_queue_arn  = "arn:aws:sqs:us-east-1:123456789012:user-notifications"
-  sqs_queue_name = "user-notifications"
+  queue = "user-notifications"
   
   input_transformer = {
     input_paths = {
@@ -149,8 +143,7 @@ module "critical_events" {
     detail-type = ["Critical Alert"]
   })
   
-  sqs_queue_arn   = "arn:aws:sqs:us-east-1:123456789012:critical-alerts"
-  sqs_queue_name  = "critical-alerts"
+  queue           = "critical-alerts"
   dead_letter_arn = "arn:aws:sqs:us-east-1:123456789012:critical-alerts-dlq"
   
   retry_policy = {
@@ -158,7 +151,6 @@ module "critical_events" {
     maximum_retry_attempts       = 3
   }
 }
-```
 
 ### Complete Multi-Module Example
 
@@ -194,34 +186,32 @@ module "sqs" {
 module "order_events_to_sqs" {
   source = "./tf/module/aws/eventbridge_sqs_target"
   
-  rule_name      = "order-created"
-  event_bus_name = module.eventbridge.event_bus_names["orders"]
-  prefix         = "myapp"
+  rule_name = "order-created"
+  eventbus  = module.eventbridge.name
+  prefix    = "myapp"
   
   event_pattern = jsonencode({
     source      = ["myapp.orders"]
     detail-type = ["Order Created", "Order Updated"]
   })
   
-  sqs_queue_arn  = module.sqs.queue_arns["order-processor"]
-  sqs_queue_name = module.sqs.queue_names["order-processor"]
+  queue = module.sqs.names["order-processor"]
 }
 
 # Route payment events to SQS
 module "payment_events_to_sqs" {
   source = "./tf/module/aws/eventbridge_sqs_target"
   
-  rule_name      = "payment-processed"
-  event_bus_name = module.eventbridge.event_bus_names["payments"]
-  prefix         = "myapp"
+  rule_name = "payment-processed"
+  eventbus  = module.eventbridge.name
+  prefix    = "myapp"
   
   event_pattern = jsonencode({
     source      = ["myapp.payments"]
     detail-type = ["Payment Processed"]
   })
   
-  sqs_queue_arn  = module.sqs.queue_arns["payment-processor"]
-  sqs_queue_name = module.sqs.queue_names["payment-processor"]
+  queue = module.sqs.names["payment-processor"]
 }
 ```
 
@@ -232,60 +222,40 @@ module "payment_events_to_sqs" {
 | `rule_name` | `string` | Name of the EventBridge rule | - | Yes |
 | `rule_description` | `string` | Description of the EventBridge rule | `""` | No |
 | `prefix` | `string` | Prefix to add to the rule name | `""` | No |
-| `event_bus_name` | `string` | Name of the EventBridge event bus | `"default"` | No |
+| `eventbus` | `string` | Name of the EventBridge event bus | `"default"` | No |
 | `event_pattern` | `string` | Event pattern in JSON format | `null` | No* |
 | `schedule_expression` | `string` | Cron or rate expression for scheduled events | `null` | No* |
 | `enabled` | `bool` | Whether the rule is enabled | `true` | No |
-| `sqs_queue_arn` | `string` | ARN of the target SQS queue | - | Yes |
-| `sqs_queue_name` | `string` | Name of the target SQS queue | - | Yes |
-| `target_id` | `string` | Unique identifier for the target | auto-generated | No |
-| `role_arn` | `string` | IAM role ARN for EventBridge to assume | `null` | No |
-| `sqs_message_group_id` | `string` | Message group ID for FIFO SQS queues | `null` | No |
+| `queue` | `string` | Name of the target SQS queue | - | Yes |
+| `target_id` | `string` | Custom identifier for the EventBridge target | `""` | No |
+| `role_arn` | `string` | IAM role for EventBridge to assume when invoking the target | `null` | No |
+| `sqs_message_group_id` | `string` | FIFO queue message group ID | `null` | No |
 | `dead_letter_arn` | `string` | ARN of SQS queue for failed events | `null` | No |
 | `input_transformer` | `object` | Transform input before sending to SQS | `null` | No |
 | `retry_policy` | `object` | Retry configuration for failed deliveries | `null` | No |
 | `tags` | `map(string)` | Additional tags to apply to the rule | `{}` | No |
-
-*Note: Either `event_pattern` or `schedule_expression` must be specified, but not both.
 
 ### Input Transformer Object
 
 | Field | Type | Description | Required |
 |-------|------|-------------|----------|
 | `input_paths` | `map(string)` | Map of JSON path expressions to extract values | No |
-| `input_template` | `string` | Template to transform the input | Yes |
+| `input_template` | `string` | Template for the transformed payload | Yes |
 
 ### Retry Policy Object
 
-| Field | Type | Description | Default | Required |
-|-------|------|-------------|---------|----------|
-| `maximum_event_age_in_seconds` | `number` | Maximum age of event (60-86400) | - | No |
-| `maximum_retry_attempts` | `number` | Maximum retry attempts (0-185) | - | No |
-
-## Outputs
-
-| Name | Description |
-|------|-------------|
-| `rule_name` | Name of the EventBridge rule |
-| `rule_arn` | ARN of the EventBridge rule |
-| `rule_id` | ID of the EventBridge rule |
-| `target_id` | ID of the event target |
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `maximum_event_age_in_seconds` | `number` | Maximum age of event (60-86400 seconds) | No |
+| `maximum_retry_attempts` | `number` | Maximum retry attempts (0-185) | No |
 
 ## Event Pattern Examples
 
-### Match Specific Source and Detail Type
-
 ```json
 {
-  "source": ["myapp.orders"],
-  "detail-type": ["Order Placed"]
-}
-```
 
 ### Match Multiple Detail Types
 
-```json
-{
   "source": ["myapp.orders"],
   "detail-type": ["Order Created", "Order Updated", "Order Cancelled"]
 }
