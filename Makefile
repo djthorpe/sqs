@@ -60,6 +60,25 @@ tfapply: terraform-dep
 		-input=false \
 		-auto-approve
 
+
+.PHONY: tfdestroy
+tfdestroy: terraform-dep
+	@echo terraform init root
+	@${TERRAFORM} -chdir=tf/workspaces/root init \
+		-backend-config="region=${AWS_REGION}" \
+		-backend-config="bucket=${TEAM}-${ENV}-tfstate" \
+		-backend-config="key=${TEAM}-${ENV}-tfstate/terraform.tfstate" \
+		-upgrade
+
+	@echo terraform destroy root
+	@${TERRAFORM} -chdir=tf/workspaces/root destroy \
+		-var aws_region=${AWS_REGION} \
+		-var env=${ENV} \
+		-var team=${TEAM} \
+		-var service=root \
+		-input=false \
+		-auto-approve
+
 ###############################################################################
 # GO COMMANDS
 

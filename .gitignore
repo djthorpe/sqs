@@ -1,6 +1,7 @@
 .terraform/
 *.tfstate*
 *.lock.hcl
+.DS_Store
 
 # Build artifacts
 bin/
