@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"flag"
@@ -22,7 +23,7 @@ var (
 	waitTime       = flag.Int("wait-time", 20, "Long polling wait time in seconds (0-20)")
 	visibilityTime = flag.Int("visibility", 30, "Visibility timeout in seconds")
 	workers        = flag.Int("workers", 5, "Number of concurrent worker goroutines")
-	deleteOnRead   = flag.Bool("delete", false, "Delete messages after processing")
+	deleteOnRead   = flag.Bool("delete", true, "Delete messages after processing")
 )
 
 type Message struct {
@@ -30,44 +31,6 @@ type Message struct {
 	MessageID     string
 	ReceiptHandle string
 	Attributes    map[string]string
-}
-
-// Event structures matching the JSON schemas
-
-type OrderItem struct {
-	SKU      string  `json:"sku"`
-	Quantity int     `json:"quantity"`
-	Price    float64 `json:"price"`
-}
-
-type OrderCreated struct {
-	OrderID    string      `json:"orderId"`
-	CustomerID string      `json:"customerId"`
-	Amount     float64     `json:"amount"`
-	Currency   string      `json:"currency"`
-	Items      []OrderItem `json:"items,omitempty"`
-	Status     string      `json:"status"`
-	Timestamp  string      `json:"timestamp"`
-}
-
-type OrderUpdated struct {
-	OrderID        string   `json:"orderId"`
-	Status         string   `json:"status"`
-	PreviousStatus string   `json:"previousStatus,omitempty"`
-	UpdatedFields  []string `json:"updatedFields,omitempty"`
-	Timestamp      string   `json:"timestamp"`
-}
-
-type PaymentProcessed struct {
-	PaymentID     string  `json:"paymentId"`
-	OrderID       string  `json:"orderId"`
-	CustomerID    string  `json:"customerId,omitempty"`
-	Amount        float64 `json:"amount"`
-	Currency      string  `json:"currency"`
-	PaymentMethod string  `json:"paymentMethod"`
-	Status        string  `json:"status"`
-	TransactionID string  `json:"transactionId,omitempty"`
-	Timestamp     string  `json:"timestamp"`
 }
 
 func main() {
@@ -203,77 +166,10 @@ func processMessage(workerID int, msg Message) {
 	fmt.Printf("\n[Worker %d] ========== New Message ==========\n", workerID)
 	fmt.Printf("[Worker %d] Message ID: %s\n", workerID, msg.MessageID)
 
-	// Try to decode the message body as JSON and determine the event type
-	var rawEvent map[string]interface{}
-	if err := json.Unmarshal([]byte(msg.Body), &rawEvent); err != nil {
-		fmt.Printf("[Worker %d] Failed to parse JSON: %v\n", workerID, err)
-		fmt.Printf("[Worker %d] Raw Body: %s\n", workerID, msg.Body)
-		return
-	}
-
-	// Determine event type based on fields present
-	eventType := determineEventType(rawEvent)
-	fmt.Printf("[Worker %d] Event Type: %s\n", workerID, eventType)
-
-	switch eventType {
-	case "OrderCreated":
-		var event OrderCreated
-		if err := json.Unmarshal([]byte(msg.Body), &event); err != nil {
-			fmt.Printf("[Worker %d] Error decoding OrderCreated: %v\n", workerID, err)
-			return
-		}
-		fmt.Printf("[Worker %d] Order ID: %s\n", workerID, event.OrderID)
-		fmt.Printf("[Worker %d] Customer ID: %s\n", workerID, event.CustomerID)
-		fmt.Printf("[Worker %d] Amount: %.2f %s\n", workerID, event.Amount, event.Currency)
-		fmt.Printf("[Worker %d] Status: %s\n", workerID, event.Status)
-		if len(event.Items) > 0 {
-			fmt.Printf("[Worker %d] Items: %d\n", workerID, len(event.Items))
-			for i, item := range event.Items {
-				fmt.Printf("[Worker %d]   Item %d: %s (qty: %d, price: %.2f)\n",
-					workerID, i+1, item.SKU, item.Quantity, item.Price)
-			}
-		}
-		fmt.Printf("[Worker %d] Timestamp: %s\n", workerID, event.Timestamp)
-
-	case "OrderUpdated":
-		var event OrderUpdated
-		if err := json.Unmarshal([]byte(msg.Body), &event); err != nil {
-			fmt.Printf("[Worker %d] Error decoding OrderUpdated: %v\n", workerID, err)
-			return
-		}
-		fmt.Printf("[Worker %d] Order ID: %s\n", workerID, event.OrderID)
-		fmt.Printf("[Worker %d] Status: %s", workerID, event.Status)
-		if event.PreviousStatus != "" {
-			fmt.Printf(" (was: %s)", event.PreviousStatus)
-		}
-		fmt.Println()
-		if len(event.UpdatedFields) > 0 {
-			fmt.Printf("[Worker %d] Updated Fields: %v\n", workerID, event.UpdatedFields)
-		}
-		fmt.Printf("[Worker %d] Timestamp: %s\n", workerID, event.Timestamp)
-
-	case "PaymentProcessed":
-		var event PaymentProcessed
-		if err := json.Unmarshal([]byte(msg.Body), &event); err != nil {
-			fmt.Printf("[Worker %d] Error decoding PaymentProcessed: %v\n", workerID, err)
-			return
-		}
-		fmt.Printf("[Worker %d] Payment ID: %s\n", workerID, event.PaymentID)
-		fmt.Printf("[Worker %d] Order ID: %s\n", workerID, event.OrderID)
-		if event.CustomerID != "" {
-			fmt.Printf("[Worker %d] Customer ID: %s\n", workerID, event.CustomerID)
-		}
-		fmt.Printf("[Worker %d] Amount: %.2f %s\n", workerID, event.Amount, event.Currency)
-		fmt.Printf("[Worker %d] Payment Method: %s\n", workerID, event.PaymentMethod)
-		fmt.Printf("[Worker %d] Status: %s\n", workerID, event.Status)
-		if event.TransactionID != "" {
-			fmt.Printf("[Worker %d] Transaction ID: %s\n", workerID, event.TransactionID)
-		}
-		fmt.Printf("[Worker %d] Timestamp: %s\n", workerID, event.Timestamp)
-
-	default:
-		fmt.Printf("[Worker %d] Unknown event type\n", workerID)
-		fmt.Printf("[Worker %d] Raw Body: %s\n", workerID, msg.Body)
+	if formatted, ok := prettyJSON(msg.Body); ok {
+		fmt.Printf("[Worker %d] Event JSON:\n%s\n", workerID, formatted)
+	} else {
+		fmt.Printf("[Worker %d] Body (non-JSON): %s\n", workerID, msg.Body)
 	}
 
 	if len(msg.Attributes) > 0 {
@@ -285,40 +181,16 @@ func processMessage(workerID int, msg Message) {
 
 	fmt.Printf("[Worker %d] ================================\n", workerID)
 
-	// Simulate processing time
-	time.Sleep(100 * time.Millisecond)
+	// Small pause to avoid spamming logs when throughput is very high
+	time.Sleep(50 * time.Millisecond)
 }
 
-// determineEventType inspects the JSON fields to determine which event type it is
-func determineEventType(event map[string]interface{}) string {
-	// Check for distinctive fields in each event type
-	if _, hasPaymentID := event["paymentId"]; hasPaymentID {
-		return "PaymentProcessed"
+func prettyJSON(body string) (string, bool) {
+	var buf bytes.Buffer
+	if err := json.Indent(&buf, []byte(body), "", "  "); err != nil {
+		return "", false
 	}
-
-	if _, hasCustomerID := event["customerId"]; hasCustomerID {
-		if _, hasAmount := event["amount"]; hasAmount {
-			if _, hasItems := event["items"]; hasItems {
-				return "OrderCreated"
-			}
-		}
-	}
-
-	if _, hasPreviousStatus := event["previousStatus"]; hasPreviousStatus {
-		return "OrderUpdated"
-	}
-
-	if _, hasOrderID := event["orderId"]; hasOrderID {
-		if _, hasStatus := event["status"]; hasStatus {
-			// Could be OrderCreated or OrderUpdated, check for more distinctive fields
-			if _, hasCustomerID := event["customerId"]; hasCustomerID {
-				return "OrderCreated"
-			}
-			return "OrderUpdated"
-		}
-	}
-
-	return "Unknown"
+	return buf.String(), true
 }
 
 func deleteMessage(ctx context.Context, client *sqs.Client, receiptHandle string) error {

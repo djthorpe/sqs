@@ -55,6 +55,7 @@ resource "aws_cloudwatch_event_target" "sqs" {
 
 # IAM policy to allow EventBridge to send messages to SQS
 resource "aws_sqs_queue_policy" "eventbridge" {
+  count     = var.manage_queue_policy ? 1 : 0
   queue_url = data.aws_sqs_queue.target.url
 
   policy = jsonencode({

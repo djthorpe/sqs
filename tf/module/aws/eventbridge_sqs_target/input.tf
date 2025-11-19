@@ -44,6 +44,12 @@ variable "queue" {
   description = "Name of the target SQS queue"
 }
 
+variable "manage_queue_policy" {
+  type        = bool
+  description = "Whether this module should attach an SQS queue policy allowing the rule to send messages"
+  default     = true
+}
+
 variable "target_id" {
   type        = string
   description = "Unique identifier for the target (auto-generated if not provided)"

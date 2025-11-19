@@ -2,26 +2,39 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge"
+	"github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
 )
 
 var (
-	queueURL = flag.String("queue", "", "SQS queue URL")
-	message  = flag.String("message", "", "Message body to send")
-	groupID  = flag.String("group-id", "", "Message group ID (for FIFO queues)")
-	dedupID  = flag.String("dedup-id", "", "Message deduplication ID (for FIFO queues)")
+	eventBus   = flag.String("bus", "default", "EventBridge event bus name")
+	source     = flag.String("source", "", "Event source identifier (e.g. myapp.orders)")
+	detailType = flag.String("detail-type", "", "Event detail type (e.g. OrderCreated)")
+	message    = flag.String("message", "", "Event detail payload (JSON)")
+	resources  = flag.String("resources", "", "Comma-separated list of resource ARNs to include (optional)")
+	traceID    = flag.String("trace-header", "", "X-Ray trace header (optional)")
 )
 
 func main() {
 	flag.Parse()
 
-	if *queueURL == "" {
-		fmt.Fprintln(os.Stderr, "Error: -queue is required")
+	if *source == "" {
+		fmt.Fprintln(os.Stderr, "Error: -source is required")
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	if *detailType == "" {
+		fmt.Fprintln(os.Stderr, "Error: -detail-type is required")
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -41,33 +54,80 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create SQS client
-	client := sqs.NewFromConfig(cfg)
+	client := eventbridge.NewFromConfig(cfg)
 
-	// Prepare message input
-	input := &sqs.SendMessageInput{
-		QueueUrl:    queueURL,
-		MessageBody: message,
-	}
-
-	// Add FIFO queue parameters if provided
-	if *groupID != "" {
-		input.MessageGroupId = groupID
-	}
-	if *dedupID != "" {
-		input.MessageDeduplicationId = dedupID
-	}
-
-	// Send message
-	result, err := client.SendMessage(ctx, input)
+	detail, err := prepareDetail(*message)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error sending message: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Invalid -message payload: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Printf("Message sent successfully\n")
-	fmt.Printf("Message ID: %s\n", *result.MessageId)
-	if result.SequenceNumber != nil {
-		fmt.Printf("Sequence Number: %s\n", *result.SequenceNumber)
+	entry := types.PutEventsRequestEntry{
+		EventBusName: aws.String(*eventBus),
+		Source:       aws.String(*source),
+		DetailType:   aws.String(*detailType),
+		Detail:       aws.String(detail),
+		Time:         aws.Time(time.Now()),
 	}
+
+	if strings.TrimSpace(*resources) != "" {
+		entry.Resources = splitAndTrim(*resources)
+	}
+
+	if strings.TrimSpace(*traceID) != "" {
+		entry.TraceHeader = aws.String(strings.TrimSpace(*traceID))
+	}
+
+	resp, err := client.PutEvents(ctx, &eventbridge.PutEventsInput{
+		Entries: []types.PutEventsRequestEntry{entry},
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error sending event: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(resp.Entries) == 0 {
+		fmt.Fprintln(os.Stderr, "No response entries returned from EventBridge")
+		os.Exit(1)
+	}
+
+	result := resp.Entries[0]
+	if result.ErrorCode != nil {
+		fmt.Fprintf(os.Stderr, "EventBridge error (%s): %s\n", aws.ToString(result.ErrorCode), aws.ToString(result.ErrorMessage))
+		os.Exit(1)
+	}
+
+	fmt.Printf("Event sent successfully to bus %s\n", *eventBus)
+	fmt.Printf("Event ID: %s\n", aws.ToString(result.EventId))
+
+}
+
+func prepareDetail(input string) (string, error) {
+	if strings.TrimSpace(input) == "" {
+		return "", fmt.Errorf("detail payload cannot be empty")
+	}
+
+	if json.Valid([]byte(input)) {
+		return input, nil
+	}
+
+	// Wrap plain text in JSON string
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+	return string(encoded), nil
+}
+
+func splitAndTrim(value string) []string {
+	parts := strings.Split(value, ",")
+	var cleaned []string
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			cleaned = append(cleaned, trimmed)
+		}
+	}
+	return cleaned
+
 }

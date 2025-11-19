@@ -36,10 +36,11 @@ module "sqs" {
 
 # Create an EventBridge Bus and register schemas
 module "eventbridge" {
-  source  = "../../module/aws/eventbridge"
-  name    = "events"
-  prefix  = local.prefix
-  schemas = local.schemas
+  source             = "../../module/aws/eventbridge"
+  name               = "events"
+  prefix             = local.prefix
+  schemas            = local.schemas
+  log_retention_days = 1
 }
 
 # Route events back to target queue
@@ -51,7 +52,8 @@ module "eventbridge_to_sqs" {
   event_pattern = jsonencode({
     source = ["${var.service}.source"]
   })
-  queue = module.sqs.names["target"]
+  queue               = module.sqs.names["target"]
+  manage_queue_policy = false
 }
 
 # Create EventBridge rule to capture S3 events and send to EventBridge bus.
@@ -71,7 +73,7 @@ module "s3_to_eventbridge" {
 module "eventbridge_s3_to_sqs" {
   for_each  = module.s3bucket.names
   source    = "../../module/aws/eventbridge_sqs_target"
-  rule_name = "s3-events-to-${each.key}"
+  rule_name = "s3-${each.key}-events-to-target"
   prefix    = local.prefix
   eventbus  = module.eventbridge.name
   event_pattern = jsonencode({
@@ -86,5 +88,38 @@ module "eventbridge_s3_to_sqs" {
       }
     }
   })
-  queue = module.sqs.names["target"]
+  queue               = module.sqs.names["target"]
+  manage_queue_policy = false
+}
+
+locals {
+  eventbridge_rule_arns = concat(
+    module.eventbridge_to_sqs.rule_arn != null ? [module.eventbridge_to_sqs.rule_arn] : [],
+    [for _, mod in module.eventbridge_s3_to_sqs : mod.rule_arn]
+  )
+}
+
+resource "aws_sqs_queue_policy" "eventbridge_targets" {
+  count     = length(local.eventbridge_rule_arns) > 0 ? 1 : 0
+  queue_url = module.sqs.ids["target"]
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      for arn in local.eventbridge_rule_arns : {
+        Sid    = "AllowEventBridge-${replace(arn, ":", "-")}"
+        Effect = "Allow"
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+        Action   = "sqs:SendMessage"
+        Resource = module.sqs.arns["target"]
+        Condition = {
+          ArnEquals = {
+            "aws:SourceArn" = arn
+          }
+        }
+      }
+    ]
+  })
 }

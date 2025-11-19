@@ -63,6 +63,7 @@ module "order_events" {
   })
   
   queue = module.sqs.names["order-processor"]
+  manage_queue_policy = false # queue policy managed centrally when multiple rules share a queue
 }
 ```
 
@@ -227,6 +228,7 @@ module "payment_events_to_sqs" {
 | `schedule_expression` | `string` | Cron or rate expression for scheduled events | `null` | No* |
 | `enabled` | `bool` | Whether the rule is enabled | `true` | No |
 | `queue` | `string` | Name of the target SQS queue | - | Yes |
+| `manage_queue_policy` | `bool` | Whether to attach an SQS policy for this rule (disable if you aggregate policies separately) | `true` | No |
 | `target_id` | `string` | Custom identifier for the EventBridge target | `""` | No |
 | `role_arn` | `string` | IAM role for EventBridge to assume when invoking the target | `null` | No |
 | `sqs_message_group_id` | `string` | FIFO queue message group ID | `null` | No |
